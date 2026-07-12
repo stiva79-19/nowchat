@@ -1,0 +1,17 @@
+{
+  "name": "nowchat",
+  "version": "1.0.0",
+  "description": "Real-time chat with room codes",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "multer": "^2.2.0",
+    "socket.io": "^4.8.3"
+  }
+}
