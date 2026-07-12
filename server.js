@@ -83,6 +83,27 @@ app.get('/api/users', (req, res) => {
   });
 });
 
+// Helper: broadcast updated lists to all online users
+function broadcastAllLists() {
+  const onlineNow = [];
+  for (const user of users.values()) {
+    if (user.online) onlineNow.push(user.name);
+  }
+  const allUsernames = new Set();
+  for (const chat of chats.values()) chat.users.forEach(u => allUsernames.add(u));
+  for (const user of users.values()) allUsernames.add(user.name);
+  
+  for (const [sid, user] of users) {
+    if (user.online) {
+      io.to(sid).emit('chat-list', {
+        chats: getUserChats(user.name),
+        allUsers: [...allUsernames],
+        onlineUsers: onlineNow
+      });
+    }
+  }
+}
+
 // Socket.io
 io.on('connection', (socket) => {
   let username = '';
@@ -92,14 +113,27 @@ io.on('connection', (socket) => {
     
     users.set(socket.id, { name: username, socketId: socket.id, online: true });
     
-    // Send their existing chats
+    // Send their existing chats + all known users
     const myChats = getUserChats(username);
-    socket.emit('chat-list', myChats);
+    const allUsernames = new Set();
+    for (const chat of chats.values()) chat.users.forEach(u => allUsernames.add(u));
+    for (const user of users.values()) allUsernames.add(user.name);
+    allUsernames.add(username);
     
-    // Notify others this user is online
+    const onlineNow = [];
+    for (const user of users.values()) {
+      if (user.online) onlineNow.push(user.name);
+    }
+    
+    socket.emit('chat-list', {
+      chats: myChats,
+      allUsers: [...allUsernames],
+      onlineUsers: onlineNow
+    });
+    
+    // Notify others this user is online + refresh their lists
     socket.broadcast.emit('user-online', username);
-    
-    console.log(`${username} joined`);
+    broadcastAllLists();
   });
 
   socket.on('join-chat', ({ chatId }) => {
@@ -142,13 +176,7 @@ io.on('connection', (socket) => {
     io.to(chatId).emit('message', { chatId, msg });
     
     // Update chat list for both participants
-    chat.users.forEach(u => {
-      for (const [sid, user] of users) {
-        if (user.name === u && user.online) {
-          io.to(sid).emit('chat-list-update', getUserChats(u));
-        }
-      }
-    });
+    broadcastAllLists();
   });
 
   socket.on('image', ({ chatId, data }) => {
@@ -189,13 +217,7 @@ io.on('connection', (socket) => {
     if (!username || !withUser || username === withUser) return;
     
     const chat = getOrCreateChat(username, withUser);
-    
-    // Send chat-list update to both users
-    for (const [sid, user] of users) {
-      if (user.name === withUser || user.name === username) {
-        io.to(sid).emit('chat-list-update', getUserChats(user.name));
-      }
-    }
+    broadcastAllLists();
     
     // Send the new chat to the requester
     socket.emit('chat-created', {
@@ -210,7 +232,7 @@ io.on('connection', (socket) => {
       const user = users.get(socket.id);
       if (user) user.online = false;
       socket.broadcast.emit('user-offline', username);
-      console.log(`${username} left`);
+      broadcastAllLists();
     }
     users.delete(socket.id);
   });
