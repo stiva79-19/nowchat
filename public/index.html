@@ -5,126 +5,148 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>NowChat</title>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #111; color: #e0e0e0; height: 100vh; overflow: hidden; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#e0e0e0;height:100vh;overflow:hidden}
+.screen{display:none;height:100vh;flex-direction:column}
+.screen.active{display:flex}
 
-/* Screens */
-.screen { display:none; height:100vh; flex-direction:column; }
-.screen.active { display:flex; }
+/* Welcome / Code screen */
+#welcome{background:linear-gradient(180deg,#1a2a1a 0%,#0d1117 100%);justify-content:center;align-items:center;gap:20px;text-align:center;padding:20px}
+#welcome .logo{width:80px;height:80px;background:#25D366;border-radius:24px;display:flex;align-items:center;justify-content:center;font-size:40px}
+#welcome h1{font-size:32px;color:#fff;font-weight:700}
+#welcome p{color:#999;font-size:14px;max-width:280px}
+.input{width:100%;max-width:280px;padding:14px 16px;border-radius:12px;border:2px solid #333;background:#1a1a2e;color:#fff;font-size:16px;text-align:center;margin:4px 0}
+.input:focus{outline:none;border-color:#25D366}
+.btn{padding:14px 40px;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-primary{background:#25D366;color:#000}
+.btn-primary:hover{background:#1ebe5b}
+.btn-outline{background:transparent;color:#25D366;border:2px solid #25D366}
+.error{color:#ff4444;font-size:13px;min-height:20px}
 
-/* Welcome screen */
-#welcome { background: linear-gradient(180deg, #1a1a2e 0%, #0d1117 100%); justify-content:center; align-items:center; gap:24px; text-align:center; padding:20px; }
-#welcome .logo { width:80px; height:80px; background: #25D366; border-radius:24px; display:flex; align-items:center; justify-content:center; font-size:40px; }
-#welcome h1 { font-size:28px; color:#fff; }
-#welcome p { color:#999; font-size:14px; max-width:300px; }
-.btn { padding:14px 40px; border:none; border-radius:12px; font-size:16px; font-weight:600; cursor:pointer; transition:all 0.2s; }
-.btn-primary { background:#25D366; color:#000; }
-.btn-primary:hover { background:#1ebe5b; }
-.btn-outline { background:transparent; color:#25D366; border:2px solid #25D366; }
-.btn-outline:hover { background:#25D36620; }
-.btn-sm { padding:8px 20px; font-size:14px; }
-.input { padding:14px 16px; border-radius:12px; border:2px solid #333; background:#1a1a2e; color:#fff; font-size:16px; width:100%; max-width:280px; text-align:center; }
-.input:focus { outline:none; border-color:#25D366; }
+/* Chat list */
+#chatlist{background:#0d1117}
+.list-header{background:#1a1a2e;padding:16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #222}
+.list-header h2{flex:1;font-size:18px;color:#fff}
+.list-header .user-badge{font-size:13px;color:#25D366;font-weight:600}
+.list-header .logout{color:#ff4444;font-size:13px;cursor:pointer;padding:4px 8px}
+.chats{flex:1;overflow-y:auto}
+.chats::-webkit-scrollbar{width:4px}
+.chats::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+.chat-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #1a1a2e;cursor:pointer;transition:background 0.15s}
+.chat-item:hover{background:#1a1a2e}
+.chat-item .avatar{width:48px;height:48px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;font-size:20px;color:#000;font-weight:700;flex-shrink:0}
+.chat-item .info{flex:1;min-width:0}
+.chat-item .name{font-size:16px;color:#fff;font-weight:500}
+.chat-item .preview{font-size:13px;color:#888;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-item .meta{text-align:right;flex-shrink:0}
+.chat-item .time{font-size:11px;color:#666}
+.chat-item .online-dot{width:8px;height:8px;background:#25D366;border-radius:50%;display:inline-block;margin-left:4px}
+.empty{text-align:center;padding:40px 20px;color:#666;font-size:14px}
+.empty .icon{font-size:48px;margin-bottom:12px}
+
+/* New chat button */
+.new-chat-btn{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:#25D366;color:#000;font-size:28px;border:none;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10;display:flex;align-items:center;justify-content:center}
+.new-chat-btn:hover{background:#1ebe5b}
+.new-chat-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000c;z-index:100;justify-content:center;align-items:center;padding:20px}
+.new-chat-modal.show{display:flex}
+.new-chat-card{background:#1a1a2e;border-radius:16px;padding:24px;width:100%;max-width:300px}
+.new-chat-card h3{color:#fff;margin-bottom:16px;text-align:center}
+.new-chat-card .user-list{max-height:200px;overflow-y:auto;margin-bottom:12px}
+.new-chat-card .user-item{padding:10px;border-radius:8px;cursor:pointer;color:#ccc;margin:2px 0}
+.new-chat-card .user-item:hover{background:#25D36620;color:#fff}
+.new-chat-card .user-item.online{color:#25D366}
+.new-chat-card .close-btn{width:100%;margin-top:8px}
 
 /* Chat screen */
-#chat { background:#0d1117; }
-.chat-header { background:#1a1a2e; padding:12px 16px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #222; }
-.chat-header .back { font-size:24px; cursor:pointer; color:#25D366; padding:4px; }
-.chat-header .room-info { flex:1; }
-.chat-header .room-code { font-size:12px; color:#25D366; font-weight:600; }
-.chat-header .user-count { font-size:11px; color:#888; }
-.chat-header .users-list { font-size:11px; color:#666; margin-top:2px; }
+#chat{background:#0d1117}
+.chat-header{background:#1a1a2e;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #222}
+.chat-header .back{font-size:24px;cursor:pointer;color:#25D366;padding:4px 8px 4px 0}
+.chat-header .avatar{width:40px;height:40px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;font-size:18px;color:#000;font-weight:700}
+.chat-header .name{font-size:16px;color:#fff;font-weight:500}
+.chat-header .status{font-size:11px;color:#888}
 
-.messages { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:4px; }
-.messages::-webkit-scrollbar { width:4px; }
-.messages::-webkit-scrollbar-thumb { background:#333; border-radius:2px; }
+.messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:4px}
+.messages::-webkit-scrollbar{width:4px}
+.messages::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+.message{max-width:75%;padding:10px 14px;border-radius:12px;position:relative;word-break:break-word;animation:fadeIn 0.2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.message.mine{align-self:flex-end;background:#005c4b;border-bottom-right-radius:4px}
+.message.other{align-self:flex-start;background:#1f2c33;border-bottom-left-radius:4px}
+.message .msg-sender{font-size:11px;font-weight:600;margin-bottom:2px}
+.message.mine .msg-sender{color:#7cba92}
+.message.other .msg-sender{color:#53bdeb}
+.message .text{font-size:15px;line-height:1.4}
+.message .time{font-size:10px;color:#ffffff55;text-align:right;margin-top:4px}
+.message img{max-width:240px;max-height:240px;border-radius:8px;cursor:pointer;display:block}
+.system-msg{text-align:center;font-size:12px;color:#666;padding:4px;font-style:italic}
+.typing{font-size:12px;color:#25D366;padding:4px 16px;font-style:italic;min-height:20px}
 
-.message { max-width:75%; padding:10px 14px; border-radius:12px; position:relative; word-break:break-word; animation: fadeIn 0.2s ease; }
-@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-.message.mine { align-self:flex-end; background:#005c4b; border-bottom-right-radius:4px; }
-.message.other { align-self:flex-start; background:#1f2c33; border-bottom-left-radius:4px; }
-.message .sender { font-size:11px; font-weight:600; margin-bottom:2px; }
-.message.mine .sender { color:#7cba92; }
-.message.other .sender { color:#53bdeb; }
-.message .text { font-size:15px; line-height:1.4; }
-.message .time { font-size:10px; color:#ffffff55; text-align:right; margin-top:4px; }
-.message img { max-width:240px; max-height:240px; border-radius:8px; cursor:pointer; display:block; }
-.message img:hover { opacity:0.9; }
+.input-bar{background:#1a1a2e;padding:10px 12px;display:flex;gap:8px;align-items:flex-end;border-top:1px solid #222}
+.input-bar .attach-btn{width:42px;height:42px;border-radius:50%;border:none;background:#2a2a3e;color:#999;font-size:20px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.input-bar .emoji-btn{background:transparent;font-size:22px;border:none;cursor:pointer;padding:8px;flex-shrink:0}
+.input-bar textarea{flex:1;background:#2a2a3e;border:none;border-radius:20px;padding:10px 16px;color:#fff;font-size:15px;resize:none;max-height:100px;font-family:inherit;line-height:1.4}
+.input-bar textarea:focus{outline:none}
+.input-bar textarea::placeholder{color:#666}
+.input-bar .send-btn{width:42px;height:42px;border-radius:50%;border:none;background:#25D366;color:#000;font-size:20px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.input-bar .send-btn:disabled{background:#333;color:#666;cursor:default}
 
-/* System messages */
-.system-msg { text-align:center; font-size:12px; color:#666; padding:4px; font-style:italic; }
+.emoji-picker{display:none;background:#1a1a2e;border-top:1px solid #222;padding:8px}
+.emoji-picker.show{display:block}
+.emoji-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(36px,1fr));gap:4px;max-height:150px;overflow-y:auto}
+.emoji-grid span{font-size:24px;text-align:center;cursor:pointer;padding:4px;border-radius:8px}
+.emoji-grid span:hover{background:#333}
 
-/* Typing indicator */
-.typing { font-size:12px; color:#25D366; padding:4px 16px; font-style:italic; min-height:20px; }
-
-/* Input bar */
-.input-bar { background:#1a1a2e; padding:10px 12px; display:flex; gap:8px; align-items:flex-end; border-top:1px solid #222; }
-.input-bar .attach-btn { width:42px; height:42px; border-radius:50%; border:none; background:#2a2a3e; color:#999; font-size:22px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
-.input-bar .attach-btn:hover { background:#25D366; color:#000; }
-.input-bar .emoji-btn { background:transparent; font-size:22px; border:none; cursor:pointer; padding:8px; flex-shrink:0; }
-.input-bar textarea { flex:1; background:#2a2a3e; border:none; border-radius:20px; padding:10px 16px; color:#fff; font-size:15px; resize:none; max-height:100px; font-family:inherit; line-height:1.4; }
-.input-bar textarea:focus { outline:none; }
-.input-bar textarea::placeholder { color:#666; }
-.input-bar .send-btn { width:42px; height:42px; border-radius:50%; border:none; background:#25D366; color:#000; font-size:20px; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
-.input-bar .send-btn:hover { background:#1ebe5b; }
-.input-bar .send-btn:disabled { background:#333; color:#666; cursor:default; }
-
-/* Emoji picker */
-.emoji-picker { display:none; background:#1a1a2e; border-top:1px solid #222; padding:8px; }
-.emoji-picker.show { display:block; }
-.emoji-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(36px,1fr)); gap:4px; max-height:150px; overflow-y:auto; }
-.emoji-grid span { font-size:24px; text-align:center; cursor:pointer; padding:4px; border-radius:8px; }
-.emoji-grid span:hover { background:#333; }
-
-/* Image preview modal */
-.modal { display:none; position:fixed; top:0;left:0;right:0;bottom:0; background:#000000e0; z-index:1000; align-items:center; justify-content:center; }
-.modal.show { display:flex; }
-.modal img { max-width:90vw; max-height:90vh; border-radius:12px; }
-.modal .close { position:absolute; top:20px; right:20px; color:#fff; font-size:32px; cursor:pointer; }
-
-/* File input hidden */
-#imageInput { display:none; }
-
-/* Join screen */
-#join { background: linear-gradient(180deg, #1a1a2e 0%, #0d1117 100%); justify-content:center; align-items:center; gap:16px; padding:20px; }
-#join h2 { color:#fff; font-size:22px; }
-#join .code-display { font-size:36px; font-weight:bold; color:#25D366; letter-spacing:6px; background:#111; padding:12px 24px; border-radius:12px; cursor:pointer; }
-#join .code-display:hover { background:#1a1a2e; }
-#join .hint { color:#888; font-size:12px; }
+.modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000e;z-index:1000;align-items:center;justify-content:center}
+.modal.show{display:flex}
+.modal img{max-width:90vw;max-height:90vh;border-radius:12px}
+.modal .close{position:absolute;top:20px;right:20px;color:#fff;font-size:32px;cursor:pointer}
+#imageInput{display:none}
 </style>
 </head>
 <body>
 
-<!-- WELCOME SCREEN -->
+<!-- WELCOME - Code entry -->
 <div id="welcome" class="screen active">
   <div class="logo">💬</div>
   <h1>NowChat</h1>
-  <p>Oda kodu oluştur</p>
-  <button class="btn btn-primary" onclick="createRoom()">➕ Yeni Oda Oluştur</button>
-  <p style="color:#666;margin-top:8px;">— veya —</p>
-  <input class="input" id="joinCode" placeholder="Oda kodunu gir" maxlength="6" oninput="this.value=this.value.replace(/\\D/g,'')">
-  <input class="input" id="joinName" placeholder="Adın" maxlength="20" style="margin-top:-8px;">
-  <button class="btn btn-outline" onclick="joinRoom()">🔗 Odaya Katıl</button>
+  <p>Giriş kodunu gir</p>
+  <input class="input" id="codeInput" placeholder="Kod" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'')">
+  <div class="error" id="codeError"></div>
+  <button class="btn btn-primary" onclick="verifyCode()">➤ Giriş</button>
 </div>
 
-<!-- JOIN/CREATE SCREEN -->
-<div id="join" class="screen">
-  <h2>📱 Oda Kodun</h2>
-  <div class="code-display" id="roomCodeDisplay" onclick="copyCode()"></div>
-  <p class="hint" style="margin-top:4px;">👆 Kopyalamak için tıkla</p>
-  <input class="input" id="myName" placeholder="Adın" maxlength="20" value="">
-  <button class="btn btn-primary" onclick="enterRoom()" style="margin-top:8px;">📲 Sohbete Başla</button>
-  <p class="hint" style="margin-top:8px;">Bu kodu arkadaşına gönder, o da katılabilsin</p>
+<!-- CHAT LIST -->
+<div id="chatlist" class="screen">
+  <div class="list-header">
+    <h2>💬 NowChat</h2>
+    <span class="user-badge" id="myNameBadge"></span>
+    <span class="logout" onclick="logout()">Çıkış</span>
+  </div>
+  <div class="chats" id="chatsContainer">
+    <div class="empty"><div class="icon">💬</div>Henüz sohbet yok<br>+ butonuna tıkla</div>
+  </div>
+  <button class="new-chat-btn" onclick="showNewChat()">+</button>
+</div>
+
+<!-- NEW CHAT MODAL -->
+<div class="new-chat-modal" id="newChatModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="new-chat-card">
+    <h3>Yeni Sohbet</h3>
+    <input class="input" id="newChatName" placeholder="Kişinin adını yaz" style="max-width:100%;margin-bottom:12px">
+    <div class="user-list" id="userList"></div>
+    <button class="btn btn-primary close-btn" onclick="startNewChat()">Sohbet Başlat</button>
+    <button class="btn btn-outline close-btn" style="margin-top:4px" onclick="document.getElementById('newChatModal').classList.remove('show')">İptal</button>
+  </div>
 </div>
 
 <!-- CHAT SCREEN -->
 <div id="chat" class="screen">
   <div class="chat-header">
-    <div class="back" onclick="leaveRoom()">←</div>
-    <div class="room-info">
-      <div class="room-code" id="activeCode"></div>
-      <div class="user-count" id="userCount"></div>
-      <div class="users-list" id="usersList"></div>
+    <div class="back" onclick="backToList()">←</div>
+    <div class="avatar" id="chatAvatar">?</div>
+    <div>
+      <div class="name" id="chatName">...</div>
+      <div class="status" id="chatStatus"></div>
     </div>
   </div>
   <div class="messages" id="messages"></div>
@@ -147,156 +169,212 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   <img id="modalImage" src="">
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
-// Dynamic base path for Tailscale proxy support
-const BASE_PATH = window.location.pathname.startsWith('/whatsapp') ? '/whatsapp' : '';
-document.write('<script src="' + BASE_PATH + '/socket.io/socket.io.js"><\/script>');
-</script>
-<script>
+// === STATE ===
 let socket;
-let currentRoom = null;
 let myUsername = '';
+let currentChatId = null;
+let onlineUsers = new Set();
 
-// Emojis
-const EMOJIS = '😀😂🤣😍🥰😘😜🤪😎🤩🥳😇🤗🤔😐😑😴🤒🤕😤😡🤬😈👻💀👽🤖💩🙈🙉🙊💋💌💘💝💖💗💓💞💕❣️❤️🧡💛💚💙💜🤎🖤🤍👍👎👏🙌🤝💪👆👇👉👈✌️🤞🤟✋👌🤌☝️🔥⭐✨💥💯✅❌🎉🎊🎈🎀🏆🥇🥈🥉⚽️🏀🎾🏐🎮🎲🎯🎸🎹🥁🎺🎷🌈☀️🌙⚡️☁️💧🌊🍎🍕🍔🌮🍣🎂🍪☕️🍺🐶🐱🐼🐨🐰🦊🐸🦄🐙🌸🌺🌻🌹💐🎄'.split('');
+// === EMOJIS ===
+const EMOJIS = '😀😂🤣😍🥰😘😜🤪😎🤩🥳😇🤗🤔😐😑😴😤😡🤬😈👻💀👽🤖💩🙈🙉🙊💋💌💘💝💖💗💓💞💕❣️❤️🧡💛💚💙💜🤎🖤🤍👍👎👏🙌🤝💪👆👇👉👈✌️🤞🤟✋👌🤌☝️🔥⭐✨💥💯✅❌🎉🎊🎈🎀🏆🥇🥈🥉⚽🏀🎾🏐🎮🎲🎯🎸🎹🥁🎺🎷🌈☀️🌙⚡☁️💧🌊🍎🍕🍔🌮🍣🎂🍪☕🍺🐶🐱🐼🐨🐰🦊🐸🦄🐙🌸🌺🌻🌹💐🎄'.split('');
+document.getElementById('emojiGrid').innerHTML = EMOJIS.map(e => 
+  `<span onclick="insertEmoji('${e}')">${e}</span>`
+).join('');
 
-// Initialize emoji grid
-document.getElementById('emojiGrid').innerHTML = EMOJIS.map(e => `<span onclick="insertEmoji('${e}')">${e}</span>`).join('');
-
-function connect() {
-  socket = io({ 
-    path: BASE_PATH + '/socket.io',
-    transports: ['polling', 'websocket'],
-    upgrade: false
-  });
-  
-  socket.on('history', (msgs) => {
-    document.getElementById('messages').innerHTML = '';
-    msgs.forEach(m => addMessage(m, m.sender === myUsername));
-    scrollDown();
-  });
-
-  socket.on('message', (msg) => {
-    addMessage(msg, msg.sender === myUsername);
-    scrollDown();
-  });
-
-  socket.on('user-joined', (name) => {
-    addSystem(`${name} katıldı 👋`);
-  });
-
-  socket.on('user-left', (name) => {
-    addSystem(`${name} ayrıldı 👋`);
-  });
-
-  socket.on('users-update', (users) => {
-    document.getElementById('userCount').textContent = `${users.length} kişi`;
-    document.getElementById('usersList').textContent = users.join(', ');
-  });
-
-  socket.on('typing', (name) => {
-    const el = document.getElementById('typingIndicator');
-    el.textContent = `${name} yazıyor...`;
-    setTimeout(() => { if (el.textContent === `${name} yazıyor...`) el.textContent = ''; }, 2000);
-  });
+// === SCREENS ===
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
 }
 
-async function createRoom() {
-  const res = await fetch(BASE_PATH + '/api/rooms', { method: 'POST' });
-  const { code } = await res.json();
-  
-  document.getElementById('welcome').classList.remove('active');
-  document.getElementById('join').classList.add('active');
-  document.getElementById('roomCodeDisplay').textContent = code;
-  currentRoom = code;
-}
-
-function copyCode() {
-  const code = document.getElementById('roomCodeDisplay').textContent;
-  navigator.clipboard.writeText(code).then(() => {
-    const el = document.getElementById('roomCodeDisplay');
-    el.textContent = '✅ KOPYALANDI!';
-    setTimeout(() => el.textContent = code, 1500);
+// === CODE VERIFY ===
+async function verifyCode() {
+  const code = document.getElementById('codeInput').value;
+  if (!code || code.length !== 6) {
+    document.getElementById('codeError').textContent = '6 haneli kodu gir!';
+    return;
+  }
+  const res = await fetch('/api/verify', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ code })
   });
-}
-
-async function joinRoom() {
-  const code = document.getElementById('joinCode').value;
-  const name = document.getElementById('joinName').value || 'Misafir';
-  if (!code || code.length !== 6) return alert('6 haneli oda kodunu gir!');
-  
-  const res = await fetch(BASE_PATH + `/api/rooms/${code}`);
   const data = await res.json();
-  if (!data.exists) return alert('Oda bulunamadı!');
-  
-  myUsername = name;
-  currentRoom = code;
-  connect();
-  
-  document.getElementById('welcome').classList.remove('active');
-  document.getElementById('chat').classList.add('active');
-  document.getElementById('activeCode').textContent = `Oda: ${code}`;
-  
-  socket.emit('join', { roomCode: code, name });
+  if (data.ok) {
+    // Code correct -> now ask name
+    const name = prompt('Adın ne?') || 'Misafir';
+    myUsername = name;
+    document.getElementById('myNameBadge').textContent = name;
+    connect();
+    showScreen('chatlist');
+  } else {
+    document.getElementById('codeError').textContent = '❌ Hatalı kod!';
+  }
 }
 
-function enterRoom() {
-  const name = document.getElementById('myName').value || 'Misafir';
-  myUsername = name;
-  connect();
+// === CONNECT ===
+function connect() {
+  socket = io({ transports: ['polling', 'websocket'], upgrade: false });
   
-  document.getElementById('join').classList.remove('active');
-  document.getElementById('chat').classList.add('active');
-  document.getElementById('activeCode').textContent = `Oda: ${currentRoom}`;
+  socket.on('connect', () => {
+    socket.emit('join', { name: myUsername });
+  });
   
-  socket.emit('join', { roomCode: currentRoom, name });
+  socket.on('chat-list', (chats) => {
+    renderChatList(chats);
+  });
+  
+  socket.on('chat-list-update', (chats) => {
+    renderChatList(chats);
+  });
+  
+  socket.on('chat-history', ({ chatId, messages, otherUser }) => {
+    if (chatId !== currentChatId) return;
+    document.getElementById('messages').innerHTML = '';
+    messages.forEach(m => addMessage(m, false));
+    scrollDown();
+  });
+  
+  socket.on('message', ({ chatId, msg }) => {
+    if (chatId === currentChatId) {
+      addMessage(msg, false);
+      scrollDown();
+    }
+  });
+  
+  socket.on('chat-created', (chat) => {
+    openChat(chat.id, chat.otherUser);
+  });
+  
+  socket.on('user-online', (name) => {
+    onlineUsers.add(name);
+    updateChatStatus();
+  });
+  
+  socket.on('user-offline', (name) => {
+    onlineUsers.delete(name);
+    updateChatStatus();
+  });
+  
+  socket.on('typing', ({ chatId, user }) => {
+    if (chatId !== currentChatId) return;
+    const el = document.getElementById('typingIndicator');
+    el.textContent = `${user} yazıyor...`;
+    setTimeout(() => { if (el.textContent === `${user} yazıyor...`) el.textContent = ''; }, 2000);
+  });
 }
 
-function leaveRoom() {
-  if (socket) socket.disconnect();
-  currentRoom = null;
-  document.getElementById('chat').classList.remove('active');
-  document.getElementById('welcome').classList.add('active');
+// === CHAT LIST ===
+function renderChatList(chats) {
+  const container = document.getElementById('chatsContainer');
+  if (!chats || chats.length === 0) {
+    container.innerHTML = '<div class="empty"><div class="icon">💬</div>Henüz sohbet yok<br>+ butonuna tıkla</div>';
+    return;
+  }
+  container.innerHTML = chats.map(c => {
+    const initial = (c.otherUser || '?')[0].toUpperCase();
+    const preview = c.lastMessage 
+      ? (c.lastMessage.type === 'image' ? '📷 Fotoğraf' : c.lastMessage.content)
+      : '';
+    const time = c.lastMessage ? new Date(c.lastMessage.time).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'}) : '';
+    const online = onlineUsers.has(c.otherUser) ? '<span class="online-dot"></span>' : '';
+    return `
+      <div class="chat-item" onclick="openChat('${c.id}', '${c.otherUser}')">
+        <div class="avatar">${initial}</div>
+        <div class="info">
+          <div class="name">${c.otherUser} ${online}</div>
+          <div class="preview">${escapeHtml(preview.substring(0, 40))}</div>
+        </div>
+        <div class="meta"><div class="time">${time}</div></div>
+      </div>`;
+  }).join('');
+}
+
+// === NEW CHAT ===
+function showNewChat() {
+  document.getElementById('newChatModal').classList.add('show');
+  document.getElementById('newChatName').value = '';
+  document.getElementById('newChatName').focus();
+  
+  // Show all known users
+  fetch('/api/users').then(r => r.json()).then(data => {
+    const list = document.getElementById('userList');
+    const others = data.all.filter(u => u !== myUsername);
+    if (others.length === 0) {
+      list.innerHTML = '<div class="empty" style="padding:20px;font-size:13px">Henüz başka kullanıcı yok</div>';
+    } else {
+      list.innerHTML = others.map(u => {
+        const online = data.online.includes(u) ? ' online' : '';
+        return `<div class="user-item${online}" onclick="document.getElementById('newChatName').value='${u}';startNewChat()">${u} ${online ? '🟢' : ''}</div>`;
+      }).join('');
+    }
+  });
+}
+
+function startNewChat() {
+  const withUser = document.getElementById('newChatName').value.trim();
+  if (!withUser || withUser === myUsername) return;
+  document.getElementById('newChatModal').classList.remove('show');
+  socket.emit('start-chat', { withUser });
+}
+
+// === OPEN CHAT ===
+function openChat(chatId, otherUser) {
+  currentChatId = chatId;
+  document.getElementById('chatName').textContent = otherUser;
+  document.getElementById('chatAvatar').textContent = (otherUser || '?')[0].toUpperCase();
   document.getElementById('messages').innerHTML = '';
   document.getElementById('messageInput').value = '';
+  showScreen('chat');
+  updateChatStatus();
+  socket.emit('join-chat', { chatId });
 }
 
+function backToList() {
+  currentChatId = null;
+  showScreen('chatlist');
+}
+
+function updateChatStatus() {
+  const name = document.getElementById('chatName').textContent;
+  const el = document.getElementById('chatStatus');
+  el.textContent = onlineUsers.has(name) ? '🟢 Çevrimiçi' : '⏳ Çevrimdışı';
+}
+
+// === MESSAGES ===
 function sendMessage() {
   const input = document.getElementById('messageInput');
   const text = input.value.trim();
-  if (!text) return;
-  
-  socket.emit('message', { text });
+  if (!text || !currentChatId) return;
+  socket.emit('message', { chatId: currentChatId, text });
   input.value = '';
   input.style.height = 'auto';
   document.getElementById('sendBtn').disabled = true;
   document.getElementById('emojiPicker').classList.remove('show');
 }
 
-async function sendImage(input) {
+function sendImage(input) {
+  if (!currentChatId) return;
   const file = input.files[0];
   if (!file) return;
-  
-  // Resize image client-side
   const reader = new FileReader();
   reader.onload = function(e) {
     const img = new Image();
     img.onload = function() {
       const canvas = document.createElement('canvas');
       let { width, height } = img;
-      const maxSize = 1024;
-      if (width > maxSize || height > maxSize) {
-        const ratio = Math.min(maxSize / width, maxSize / height);
+      const max = 1024;
+      if (width > max || height > max) {
+        const ratio = Math.min(max/width, max/height);
         width = Math.round(width * ratio);
         height = Math.round(height * ratio);
       }
       canvas.width = width;
       canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      const data = canvas.toDataURL('image/jpeg', 0.8);
-      socket.emit('image', { data });
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      socket.emit('image', { chatId: currentChatId, data: canvas.toDataURL('image/jpeg', 0.8) });
     };
     img.src = e.target.result;
   };
@@ -304,33 +382,21 @@ async function sendImage(input) {
   input.value = '';
 }
 
-function addMessage(msg, isMine) {
+function addMessage(msg, skipIfMine) {
+  if (skipIfMine && msg.sender === myUsername) return;
+  const isMine = msg.sender === myUsername;
   const div = document.createElement('div');
   div.className = `message ${isMine ? 'mine' : 'other'}`;
+  const time = new Date(msg.time).toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'});
   
-  const time = new Date(msg.time).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-  
-  if (!isMine) {
-    div.innerHTML += `<div class="sender">${msg.sender}</div>`;
-  }
-  
+  if (!isMine) div.innerHTML += `<div class="msg-sender">${msg.sender}</div>`;
   if (msg.type === 'image') {
-    div.innerHTML += `<img src="${msg.content}" onclick="showImage('${msg.content}')" loading="lazy">`;
+    div.innerHTML += `<img src="${msg.content}" onclick="showImage('${msg.content}')">`;
   } else {
-    div.innerHTML += `<div class="text">${msg.content}</div>`;
+    div.innerHTML += `<div class="text">${escapeHtml(msg.content)}</div>`;
   }
-  
   div.innerHTML += `<div class="time">${time}</div>`;
-  
   document.getElementById('messages').appendChild(div);
-}
-
-function addSystem(text) {
-  const div = document.createElement('div');
-  div.className = 'system-msg';
-  div.textContent = text;
-  document.getElementById('messages').appendChild(div);
-  scrollDown();
 }
 
 function scrollDown() {
@@ -343,43 +409,47 @@ function showImage(src) {
   document.getElementById('imageModal').classList.add('show');
 }
 
+// === EMOJI ===
+function toggleEmoji() {
+  document.getElementById('emojiPicker').classList.toggle('show');
+}
+function insertEmoji(e) {
+  const input = document.getElementById('messageInput');
+  input.value += e;
+  input.focus();
+  document.getElementById('sendBtn').disabled = false;
+}
+
+// === INPUT HANDLING ===
 function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendMessage();
   }
-  
-  // Auto-resize textarea
   setTimeout(() => {
-    const ta = e.target;
-    ta.style.height = 'auto';
-    ta.style.height = Math.min(ta.scrollHeight, 100) + 'px';
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
   }, 0);
 }
-
-function toggleEmoji() {
-  document.getElementById('emojiPicker').classList.toggle('show');
-}
-
-function insertEmoji(emoji) {
-  const input = document.getElementById('messageInput');
-  input.value += emoji;
-  input.focus();
-  document.getElementById('sendBtn').disabled = false;
-}
-
-// Enable send button on input
 document.getElementById('messageInput').addEventListener('input', function() {
   document.getElementById('sendBtn').disabled = !this.value.trim();
-  socket?.emit('typing');
+  if (currentChatId) socket?.emit('typing', { chatId: currentChatId });
 });
 
-// Typing throttle
-let typingTimer;
-document.getElementById('messageInput').addEventListener('input', function() {
-  clearTimeout(typingTimer);
-  typingTimer = setTimeout(() => socket?.emit('typing'), 500);
-});
+// === LOGOUT ===
+function logout() {
+  if (socket) socket.disconnect();
+  myUsername = '';
+  currentChatId = null;
+  showScreen('welcome');
+}
+
+// === HELPERS ===
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 </script>
 </body>
 </html>

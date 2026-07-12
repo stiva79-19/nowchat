@@ -3,7 +3,6 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const crypto = require('crypto');
-const multer = require('multer');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,103 +11,123 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
   transports: ['polling', 'websocket'],
   pingTimeout: 60000,
-  pingInterval: 25000,
-  connectTimeout: 30000
+  pingInterval: 25000
 });
 
-// In-memory storage
-const rooms = new Map(); // roomCode -> { messages[], users[], createdAt }
+// === CONFIG ===
+const ACCESS_CODE = '123456'; // Herkes bu kodla girer
 const MAX_MESSAGES = 500;
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
-// Generate 6-digit room code
-function generateCode() {
-  return crypto.randomInt(100000, 999999).toString();
+// === STORAGE ===
+const users = new Map();       // socketId -> { name, socketId, online }
+const chats = new Map();       // chatId -> { id, users: [name1, name2], messages[] }
+
+function getChatId(user1, user2) {
+  return [user1, user2].sort().join('::');
 }
 
-// Ensure room exists
-function getOrCreateRoom(code) {
-  if (!rooms.has(code)) {
-    rooms.set(code, { messages: [], users: [], createdAt: Date.now() });
+function getOrCreateChat(user1, user2) {
+  const id = getChatId(user1, user2);
+  if (!chats.has(id)) {
+    chats.set(id, { id, users: [user1, user2].sort(), messages: [] });
   }
-  return rooms.get(code);
+  return chats.get(id);
 }
 
-// Multer for image uploads
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage,
-  limits: { fileSize: MAX_IMAGE_SIZE },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Only images allowed'));
+function getUserChats(username) {
+  const result = [];
+  for (const chat of chats.values()) {
+    if (chat.users.includes(username)) {
+      result.push({
+        id: chat.id,
+        otherUser: chat.users.find(u => u !== username),
+        lastMessage: chat.messages.length > 0 ? chat.messages[chat.messages.length - 1] : null
+      });
+    }
   }
-});
+  return result;
+}
 
-// Strip /whatsapp prefix for Tailscale proxy support
-app.use((req, res, next) => {
-  if (req.url === '/whatsapp' || req.url === '/whatsapp/') {
-    return res.sendFile(path.join(__dirname, 'public', 'index.html'));
-  }
-  if (req.url.startsWith('/whatsapp/')) {
-    req.url = req.url.replace('/whatsapp', '');
-  }
-  next();
-});
-
+// Middleware
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json({ limit: '10mb' }));
 
-// Create a new room
-app.post('/api/rooms', (req, res) => {
-  const code = generateCode();
-  getOrCreateRoom(code);
-  res.json({ code });
+// Verify access code
+app.post('/api/verify', (req, res) => {
+  if (req.body.code === ACCESS_CODE) {
+    res.json({ ok: true });
+  } else {
+    res.json({ ok: false });
+  }
 });
 
-// Check if room exists
-app.get('/api/rooms/:code', (req, res) => {
-  const exists = rooms.has(req.params.code);
-  res.json({ exists, userCount: exists ? rooms.get(req.params.code).users.length : 0 });
-});
-
-// Upload image
-app.post('/api/upload', upload.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No image' });
-  const b64 = req.file.buffer.toString('base64');
-  const mime = req.file.mimetype;
-  res.json({ data: `data:${mime};base64,${b64}` });
+// Get list of users who have been active
+app.get('/api/users', (req, res) => {
+  const onlineUsers = [];
+  const allUsernames = new Set();
+  
+  for (const user of users.values()) {
+    allUsernames.add(user.name);
+    if (user.online) onlineUsers.push(user.name);
+  }
+  
+  // Also get users from chats
+  for (const chat of chats.values()) {
+    chat.users.forEach(u => allUsernames.add(u));
+  }
+  
+  res.json({ 
+    online: onlineUsers,
+    all: [...allUsernames]
+  });
 });
 
 // Socket.io
 io.on('connection', (socket) => {
-  let currentRoom = null;
   let username = '';
 
-  socket.on('join', ({ roomCode, name }) => {
-    currentRoom = roomCode;
+  socket.on('join', ({ name }) => {
     username = name || 'Misafir';
     
-    const room = getOrCreateRoom(roomCode);
-    room.users.push(username);
+    users.set(socket.id, { name: username, socketId: socket.id, online: true });
     
-    socket.join(roomCode);
+    // Send their existing chats
+    const myChats = getUserChats(username);
+    socket.emit('chat-list', myChats);
     
-    // Send message history
-    socket.emit('history', room.messages.slice(-MAX_MESSAGES));
+    // Notify others this user is online
+    socket.broadcast.emit('user-online', username);
     
-    // Notify others
-    socket.to(roomCode).emit('user-joined', username);
-    io.to(roomCode).emit('users-update', room.users);
-    
-    console.log(`${username} joined room ${roomCode}`);
+    console.log(`${username} joined`);
   });
 
-  socket.on('message', ({ text }) => {
-    if (!currentRoom) return;
-    if (!text || text.length > 5000) return;
+  socket.on('join-chat', ({ chatId }) => {
+    if (!username) return;
     
-    const room = getOrCreateRoom(currentRoom);
+    // Leave previous chat room
+    socket.rooms.forEach(room => {
+      if (room !== socket.id) socket.leave(room);
+    });
+    
+    socket.join(chatId);
+    
+    const chat = chats.get(chatId);
+    if (chat) {
+      socket.emit('chat-history', {
+        chatId,
+        messages: chat.messages.slice(-MAX_MESSAGES),
+        otherUser: chat.users.find(u => u !== username)
+      });
+    }
+  });
+
+  socket.on('message', ({ chatId, text }) => {
+    if (!username || !chatId || !text || text.length > 5000) return;
+    
+    const chat = chats.get(chatId);
+    if (!chat) return;
+    
     const msg = {
       id: crypto.randomUUID(),
       type: 'text',
@@ -117,17 +136,27 @@ io.on('connection', (socket) => {
       time: Date.now()
     };
     
-    room.messages.push(msg);
-    if (room.messages.length > MAX_MESSAGES) room.messages.shift();
+    chat.messages.push(msg);
+    if (chat.messages.length > MAX_MESSAGES) chat.messages.shift();
     
-    io.to(currentRoom).emit('message', msg);
+    io.to(chatId).emit('message', { chatId, msg });
+    
+    // Update chat list for both participants
+    chat.users.forEach(u => {
+      for (const [sid, user] of users) {
+        if (user.name === u && user.online) {
+          io.to(sid).emit('chat-list-update', getUserChats(u));
+        }
+      }
+    });
   });
 
-  socket.on('image', ({ data }) => {
-    if (!currentRoom) return;
-    if (!data || data.length > MAX_IMAGE_SIZE * 1.4) return;
+  socket.on('image', ({ chatId, data }) => {
+    if (!username || !chatId || !data) return;
     
-    const room = getOrCreateRoom(currentRoom);
+    const chat = chats.get(chatId);
+    if (!chat) return;
+    
     const msg = {
       id: crypto.randomUUID(),
       type: 'image',
@@ -136,33 +165,54 @@ io.on('connection', (socket) => {
       time: Date.now()
     };
     
-    room.messages.push(msg);
-    if (room.messages.length > MAX_MESSAGES) room.messages.shift();
+    chat.messages.push(msg);
+    if (chat.messages.length > MAX_MESSAGES) chat.messages.shift();
     
-    io.to(currentRoom).emit('message', msg);
+    io.to(chatId).emit('message', { chatId, msg });
+    
+    chat.users.forEach(u => {
+      for (const [sid, user] of users) {
+        if (user.name === u && user.online) {
+          io.to(sid).emit('chat-list-update', getUserChats(u));
+        }
+      }
+    });
   });
 
-  socket.on('typing', () => {
-    if (currentRoom) {
-      socket.to(currentRoom).emit('typing', username);
+  socket.on('typing', ({ chatId }) => {
+    if (!username || !chatId) return;
+    socket.to(chatId).emit('typing', { chatId, user: username });
+  });
+
+  // Start a chat with another user
+  socket.on('start-chat', ({ withUser }) => {
+    if (!username || !withUser || username === withUser) return;
+    
+    const chat = getOrCreateChat(username, withUser);
+    
+    // Send chat-list update to both users
+    for (const [sid, user] of users) {
+      if (user.name === withUser || user.name === username) {
+        io.to(sid).emit('chat-list-update', getUserChats(user.name));
+      }
     }
+    
+    // Send the new chat to the requester
+    socket.emit('chat-created', {
+      id: chat.id,
+      otherUser: withUser,
+      lastMessage: null
+    });
   });
 
   socket.on('disconnect', () => {
-    if (currentRoom) {
-      const room = rooms.get(currentRoom);
-      if (room) {
-        room.users = room.users.filter(u => u !== username);
-        if (room.users.length === 0) {
-          // Keep room for 1 hour after last user leaves
-          setTimeout(() => {
-            if (room.users.length === 0) rooms.delete(currentRoom);
-          }, 3600000);
-        }
-        io.to(currentRoom).emit('users-update', room.users);
-        socket.to(currentRoom).emit('user-left', username);
-      }
+    if (username) {
+      const user = users.get(socket.id);
+      if (user) user.online = false;
+      socket.broadcast.emit('user-offline', username);
+      console.log(`${username} left`);
     }
+    users.delete(socket.id);
   });
 });
 
