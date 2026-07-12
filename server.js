@@ -7,7 +7,14 @@ const multer = require('multer');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 10 * 1024 * 1024 });
+const io = new Server(server, {
+  maxHttpBufferSize: 10 * 1024 * 1024,
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  transports: ['polling', 'websocket'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  connectTimeout: 30000
+});
 
 // In-memory storage
 const rooms = new Map(); // roomCode -> { messages[], users[], createdAt }

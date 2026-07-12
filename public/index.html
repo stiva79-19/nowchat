@@ -164,7 +164,11 @@ const EMOJIS = '😀😂🤣😍🥰😘😜🤪😎🤩🥳😇🤗🤔😐😑
 document.getElementById('emojiGrid').innerHTML = EMOJIS.map(e => `<span onclick="insertEmoji('${e}')">${e}</span>`).join('');
 
 function connect() {
-  socket = io({ path: BASE_PATH + '/socket.io' });
+  socket = io({ 
+    path: BASE_PATH + '/socket.io',
+    transports: ['polling', 'websocket'],
+    upgrade: false
+  });
   
   socket.on('history', (msgs) => {
     document.getElementById('messages').innerHTML = '';
