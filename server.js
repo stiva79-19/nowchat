@@ -260,6 +260,99 @@ io.on('connection', (socket) => {
     broadcastAllLists();
   });
 
+  // === WEBRTC SIGNALING ===
+  // 1-on-1 call
+  socket.on('call-user', ({ to, chatId }) => {
+    if (!username || !to) return;
+    // Find target user's socket
+    for (const [sid, user] of users) {
+      if (user.name === to && user.online) {
+        io.to(sid).emit('incoming-call', { from: username, chatId });
+        return;
+      }
+    }
+    socket.emit('call-failed', { reason: 'Kullanıcı çevrimdışı' });
+  });
+
+  socket.on('call-accept', ({ to, chatId }) => {
+    for (const [sid, user] of users) {
+      if (user.name === to && user.online) {
+        io.to(sid).emit('call-accepted', { from: username, chatId });
+        return;
+      }
+    }
+  });
+
+  socket.on('call-reject', ({ to }) => {
+    for (const [sid, user] of users) {
+      if (user.name === to && user.online) {
+        io.to(sid).emit('call-rejected', { from: username });
+        return;
+      }
+    }
+  });
+
+  socket.on('call-end', ({ to }) => {
+    if (to) {
+      for (const [sid, user] of users) {
+        if (user.name === to && user.online) {
+          io.to(sid).emit('call-ended', { from: username });
+        }
+      }
+    }
+  });
+
+  // WebRTC SDP/ICE forwarding
+  socket.on('webrtc-offer', ({ to, offer, callId }) => {
+    for (const [sid, user] of users) {
+      if (user.name === to && user.online) {
+        io.to(sid).emit('webrtc-offer', { from: username, offer, callId });
+        return;
+      }
+    }
+  });
+
+  socket.on('webrtc-answer', ({ to, answer, callId }) => {
+    for (const [sid, user] of users) {
+      if (user.name === to && user.online) {
+        io.to(sid).emit('webrtc-answer', { from: username, answer, callId });
+        return;
+      }
+    }
+  });
+
+  socket.on('ice-candidate', ({ to, candidate, callId }) => {
+    for (const [sid, user] of users) {
+      if (user.name === to && user.online) {
+        io.to(sid).emit('ice-candidate', { from: username, candidate, callId });
+        return;
+      }
+    }
+  });
+
+  // Group call: join call room
+  socket.on('group-call-start', ({ groupId }) => {
+    if (!username || !groupId) return;
+    const group = groups.get(groupId);
+    if (!group || !group.users.includes(username)) return;
+    
+    // Notify all group members
+    group.users.forEach(u => {
+      if (u === username) return;
+      for (const [sid, user] of users) {
+        if (user.name === u && user.online) {
+          io.to(sid).emit('group-call-started', { groupId, from: username });
+        }
+      }
+    });
+    
+    // Send caller the list of online members to connect to
+    socket.emit('group-call-members', {
+      groupId,
+      members: group.users.filter(u => u !== username && [...users.values()].some(v => v.name === u && v.online))
+    });
+  });
+
   socket.on('disconnect', () => {
     if (username) {
       const user = users.get(socket.id);

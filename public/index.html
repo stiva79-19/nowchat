@@ -102,6 +102,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .modal img{max-width:90vw;max-height:90vh;border-radius:12px}
 .modal .close{position:absolute;top:20px;right:20px;color:#fff;font-size:32px;cursor:pointer}
 #imageInput{display:none}
+
+/* CALL OVERLAY */
+.call-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#0d1117;z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+.call-overlay.active{display:flex}
+.call-overlay .call-avatar{width:100px;height:100px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;font-size:42px;color:#000;font-weight:700;overflow:hidden;margin-bottom:8px}
+.call-overlay .call-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.call-overlay .call-name{font-size:22px;color:#fff;font-weight:600}
+.call-overlay .call-status{font-size:14px;color:#888}
+.call-overlay .call-duration{font-size:18px;color:#25D366;font-family:monospace}
+.call-overlay .call-buttons{display:flex;gap:24px;margin-top:16px}
+.call-overlay .call-btn{width:60px;height:60px;border-radius:50%;border:none;font-size:24px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center}
+.call-overlay .call-btn.accept{background:#25D366;color:#000}
+.call-overlay .call-btn.reject{background:#e74c3c;color:#fff}
+.call-overlay .call-btn.end{background:#e74c3c;color:#fff}
+.call-overlay .call-btn.mute{background:#333;color:#fff}
+.call-overlay .call-btn.mute.muted{background:#e74c3c}
+.call-overlay .call-btn:hover{transform:scale(1.1)}
+.call-header-btn{width:36px;height:36px;border-radius:50%;border:none;background:#25D366;color:#000;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-right:4px}
+.call-header-btn:hover{background:#1ebe5b}
+
+/* Ripple animation during ringing */
+@keyframes ripple{0%{box-shadow:0 0 0 0 rgba(37,211,102,.5)}100%{box-shadow:0 0 0 20px rgba(37,211,102,0)}}
+.ringing .call-avatar{animation:ripple 1.5s infinite}
 </style>
 </head>
 <body>
@@ -162,6 +185,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="name" id="chatName">...</div>
       <div class="status" id="chatStatus"></div>
     </div>
+    <div style="flex:1"></div>
+    <button class="call-header-btn" onclick="startCall()" title="Ara">📞</button>
   </div>
   <div class="messages" id="messages"></div>
   <div class="typing" id="typingIndicator"></div>
@@ -182,6 +207,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="modal" id="imageModal" onclick="this.classList.remove('show')">
   <span class="close">&times;</span>
   <img id="modalImage" src="">
+</div>
+
+<!-- CALL OVERLAY -->
+<div class="call-overlay" id="callOverlay">
+  <div class="call-avatar" id="callAvatar">?</div>
+  <div class="call-name" id="callName">...</div>
+  <div class="call-status" id="callStatus">Bağlanıyor...</div>
+  <div class="call-duration" id="callDuration" style="display:none">00:00</div>
+  <div class="call-buttons">
+    <button class="call-btn mute" id="muteBtn" onclick="toggleMute()" style="display:none">🎤</button>
+    <button class="call-btn reject" id="rejectBtn" onclick="rejectCall()">📵</button>
+    <button class="call-btn accept" id="acceptBtn" onclick="acceptCall()" style="display:none">📞</button>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
@@ -634,6 +672,297 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// =================================================================
+// === WEBRTC CALLS
+// =================================================================
+let callState = 'idle'; // idle | calling | ringing | connected
+let callTarget = null;
+let callChatId = null;
+let peerConnection = null;
+let localStream = null;
+let isMuted = false;
+let callTimer = null;
+let callSeconds = 0;
+
+// STUN servers for NAT traversal
+const rtcConfig = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
+};
+
+function startCall() {
+  if (callState !== 'idle') return;
+  if (!currentChatId) return;
+  
+  const otherUser = document.getElementById('chatName').textContent;
+  callTarget = otherUser;
+  callChatId = currentChatId;
+  callState = 'calling';
+  
+  showCallUI(otherUser, 'Aranıyor...');
+  document.getElementById('rejectBtn').style.display = '';
+  document.getElementById('acceptBtn').style.display = 'none';
+  document.getElementById('muteBtn').style.display = 'none';
+  document.getElementById('callOverlay').classList.add('ringing');
+  
+  socket.emit('call-user', { to: otherUser, chatId: currentChatId });
+  
+  // Timeout after 30s
+  setTimeout(() => {
+    if (callState === 'calling') {
+      endCall('Yanıt yok');
+    }
+  }, 30000);
+}
+
+function showCallUI(name, status) {
+  document.getElementById('callOverlay').classList.add('active');
+  document.getElementById('callName').textContent = name;
+  document.getElementById('callStatus').textContent = status;
+  const avatarEl = document.getElementById('callAvatar');
+  const pic = profilePics[name];
+  if (pic) {
+    avatarEl.innerHTML = `<img src="${pic}">`;
+  } else {
+    avatarEl.innerHTML = (name || '?')[0].toUpperCase();
+    avatarEl.style.background = '#25D366';
+  }
+}
+
+async function initLocalStream() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch(e) {
+    alert('Mikrofon erişimi gerekli!');
+    throw e;
+  }
+}
+
+async function createPeerConnection() {
+  const pc = new RTCPeerConnection(rtcConfig);
+  
+  if (localStream) {
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  }
+  
+  pc.onicecandidate = (e) => {
+    if (e.candidate && callTarget) {
+      socket.emit('ice-candidate', { to: callTarget, candidate: e.candidate, callId: callChatId });
+    }
+  };
+  
+  pc.ontrack = (e) => {
+    const audio = new Audio();
+    audio.srcObject = e.streams[0];
+    audio.play().catch(() => {});
+  };
+  
+  pc.oniceconnectionstatechange = () => {
+    if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+      endCall('Bağlantı koptu');
+    }
+  };
+  
+  return pc;
+}
+
+async function acceptCall() {
+  if (callState !== 'ringing') return;
+  
+  try {
+    await initLocalStream();
+  } catch(e) { return; }
+  
+  callState = 'connected';
+  document.getElementById('callOverlay').classList.remove('ringing');
+  document.getElementById('callStatus').textContent = 'Bağlandı';
+  document.getElementById('rejectBtn').style.display = 'none';
+  document.getElementById('acceptBtn').style.display = 'none';
+  document.getElementById('muteBtn').style.display = '';
+  
+  startCallTimer();
+  
+  socket.emit('call-accept', { to: callTarget, chatId: callChatId });
+}
+
+function rejectCall() {
+  if (callState === 'ringing') {
+    socket.emit('call-reject', { to: callTarget });
+  } else if (callState === 'calling') {
+    socket.emit('call-end', { to: callTarget });
+  }
+  endCall();
+}
+
+function endCall(msg) {
+  if (callState === 'connected') {
+    socket.emit('call-end', { to: callTarget });
+  }
+  
+  cleanupCall();
+  
+  if (msg) {
+    document.getElementById('callStatus').textContent = msg;
+    setTimeout(() => {
+      document.getElementById('callOverlay').classList.remove('active', 'ringing');
+    }, 1500);
+  } else {
+    document.getElementById('callOverlay').classList.remove('active', 'ringing');
+  }
+}
+
+function cleanupCall() {
+  callState = 'idle';
+  
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  if (callTimer) {
+    clearInterval(callTimer);
+    callTimer = null;
+  }
+  callSeconds = 0;
+  callTarget = null;
+  
+  document.getElementById('callDuration').style.display = 'none';
+  document.getElementById('muteBtn').classList.remove('muted');
+  isMuted = false;
+}
+
+function toggleMute() {
+  if (!localStream) return;
+  isMuted = !isMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  document.getElementById('muteBtn').classList.toggle('muted', isMuted);
+  document.getElementById('muteBtn').textContent = isMuted ? '🔇' : '🎤';
+}
+
+function startCallTimer() {
+  callSeconds = 0;
+  const el = document.getElementById('callDuration');
+  el.style.display = '';
+  callTimer = setInterval(() => {
+    callSeconds++;
+    const m = Math.floor(callSeconds / 60).toString().padStart(2, '0');
+    const s = (callSeconds % 60).toString().padStart(2, '0');
+    el.textContent = m + ':' + s;
+  }, 1000);
+}
+
+// Socket handlers for calls
+function setupCallHandlers() {
+  // Incoming 1-on-1 call
+  socket.on('incoming-call', ({ from, chatId }) => {
+    if (callState !== 'idle') {
+      socket.emit('call-reject', { to: from });
+      return;
+    }
+    callState = 'ringing';
+    callTarget = from;
+    callChatId = chatId;
+    
+    showCallUI(from, 'Seni arıyor...');
+    document.getElementById('callOverlay').classList.add('ringing');
+    document.getElementById('rejectBtn').style.display = '';
+    document.getElementById('acceptBtn').style.display = '';
+    document.getElementById('muteBtn').style.display = 'none';
+    
+    // Auto-reject after 30s
+    setTimeout(() => {
+      if (callState === 'ringing') rejectCall();
+    }, 30000);
+  });
+  
+  // Call accepted - create offer
+  socket.on('call-accepted', ({ from, chatId }) => {
+    if (callState !== 'calling') return;
+    createOffer();
+  });
+  
+  // Call rejected
+  socket.on('call-rejected', ({ from }) => {
+    endCall('Meşgul');
+  });
+  
+  // Call ended by other
+  socket.on('call-ended', () => {
+    endCall('Arama sona erdi');
+  });
+  
+  // Call failed
+  socket.on('call-failed', ({ reason }) => {
+    endCall(reason);
+  });
+  
+  // WebRTC signaling
+  socket.on('webrtc-offer', async ({ from, offer, callId }) => {
+    if (callState !== 'connected') return;
+    try {
+      if (!localStream) await initLocalStream();
+      peerConnection = await createPeerConnection();
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socket.emit('webrtc-answer', { to: from, answer, callId });
+    } catch(e) {
+      console.error('Offer error:', e);
+    }
+  });
+  
+  socket.on('webrtc-answer', async ({ from, answer, callId }) => {
+    if (!peerConnection) return;
+    try {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+    } catch(e) {
+      console.error('Answer error:', e);
+    }
+  });
+  
+  socket.on('ice-candidate', async ({ from, candidate, callId }) => {
+    if (!peerConnection) return;
+    try {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch(e) {
+      console.error('ICE error:', e);
+    }
+  });
+}
+
+async function createOffer() {
+  try {
+    if (!localStream) await initLocalStream();
+    peerConnection = await createPeerConnection();
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    socket.emit('webrtc-offer', { to: callTarget, offer, callId: callChatId });
+    
+    callState = 'connected';
+    document.getElementById('callOverlay').classList.remove('ringing');
+    document.getElementById('callStatus').textContent = 'Bağlandı';
+    document.getElementById('rejectBtn').style.display = 'none';
+    document.getElementById('acceptBtn').style.display = 'none';
+    document.getElementById('muteBtn').style.display = '';
+    startCallTimer();
+  } catch(e) {
+    console.error('Offer error:', e);
+    endCall('Bağlantı hatası');
+  }
+}
+
+// Initialize call handlers after socket connection
+const origConnect = connect;
+connect = function() {
+  origConnect();
+  setupCallHandlers();
+};
 </script>
 </body>
 </html>
