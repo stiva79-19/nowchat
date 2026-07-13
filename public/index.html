@@ -127,6 +127,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="empty"><div class="icon">💬</div>Henüz sohbet yok<br>+ butonuna tıkla</div>
   </div>
   <button class="new-chat-btn" onclick="showNewChat()">+</button>
+<button class="new-chat-btn" style="bottom:88px;background:#6C5CE7" onclick="showNewGroup()">👥</button>
 </div>
 
 <!-- NEW CHAT MODAL -->
@@ -137,6 +138,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="user-list" id="userList"></div>
     <button class="btn btn-primary close-btn" onclick="startNewChat()">Sohbet Başlat</button>
     <button class="btn btn-outline close-btn" style="margin-top:4px" onclick="document.getElementById('newChatModal').classList.remove('show')">İptal</button>
+  </div>
+</div>
+
+<!-- NEW GROUP MODAL -->
+<div class="new-chat-modal" id="newGroupModal" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="new-chat-card">
+    <h3>👥 Grup Oluştur</h3>
+    <input class="input" id="groupNameInput" placeholder="Grup adı" style="max-width:100%;margin-bottom:8px">
+    <div class="user-list" id="groupUserList" style="margin-bottom:8px"></div>
+    <small style="color:#666;display:block;margin-bottom:8px">Seçili: <span id="selectedCount">0</span></small>
+    <button class="btn btn-primary close-btn" onclick="createGroup()">✅ Grubu Oluştur</button>
+    <button class="btn btn-outline close-btn" style="margin-top:4px" onclick="document.getElementById('newGroupModal').classList.remove('show')">İptal</button>
   </div>
 </div>
 
@@ -269,12 +282,22 @@ function connect() {
     if (data.profilePictures) {
       profilePics = data.profilePictures;
     }
-    renderChatList(data.chats, data.allUsers || []);
+    renderChatList(data.chats || [], data.allUsers || [], data.groups || []);
   });
   
-  socket.on('chat-history', ({ chatId, messages, otherUser }) => {
+  socket.on('chat-history', ({ chatId, messages, otherUser, name, users, type }) => {
     if (chatId !== currentChatId) return;
     document.getElementById('messages').innerHTML = '';
+    if (type === 'group') {
+      document.getElementById('chatName').textContent = name || 'Grup';
+      document.getElementById('chatAvatar').innerHTML = '👥';
+      document.getElementById('chatStatus').textContent = (users || []).join(', ');
+    } else {
+      document.getElementById('chatName').textContent = otherUser || name || '...';
+      document.getElementById('chatAvatar').innerHTML = getAvatar(otherUser || name || '?');
+      document.getElementById('chatStatus').textContent = '';
+    }
+    updateChatStatus();
     messages.forEach(m => addMessage(m, false));
     scrollDown();
   });
@@ -288,7 +311,14 @@ function connect() {
   });
   
   socket.on('chat-created', (chat) => {
-    openChat(chat.id, chat.otherUser);
+    if (chat.type === 'group') {
+      openChat(chat.id, null);
+      document.getElementById('chatName').textContent = chat.name;
+      document.getElementById('chatAvatar').innerHTML = '👥';
+      document.getElementById('chatStatus').textContent = (chat.users || []).join(', ');
+    } else {
+      openChat(chat.id, chat.otherUser);
+    }
   });
   
   socket.on('user-online', (name) => {
@@ -310,15 +340,27 @@ function connect() {
 }
 
 // === CHAT LIST ===
-function renderChatList(chats, allUsers) {
+function renderChatList(chats, allUsers, groupsData) {
   const container = document.getElementById('chatsContainer');
-  const chatUserSet = new Set(chats.map(c => c.otherUser));
+  const chatUserSet = new Set();
+  chats.forEach(c => chatUserSet.add(c.otherUser));
   
   let html = '';
   
-  // Existing chats
+  // Groups
+  (groupsData || []).forEach(g => {
+    html += `
+      <div class="chat-item" onclick="openChat('${g.id}', null)" style="border-left:3px solid #6C5CE7">
+        <div class="avatar" style="background:#6C5CE7">👥</div>
+        <div class="info">
+          <div class="name">${escapeHtml(g.name)}</div>
+          <div class="preview" style="color:#888">${g.users.length} kişi</div>
+        </div>
+      </div>`;
+  });
+  
+  // Direct chats
   chats.forEach(c => {
-    const initial = (c.otherUser || '?')[0].toUpperCase();
     const preview = c.lastMessage 
       ? (c.lastMessage.type === 'image' ? '📷 Fotoğraf' : c.lastMessage.content)
       : '';
@@ -387,11 +429,57 @@ function startNewChat() {
   socket.emit('start-chat', { withUser });
 }
 
+// === NEW GROUP ===
+let groupSelected = new Set();
+
+function showNewGroup() {
+  document.getElementById('newGroupModal').classList.add('show');
+  document.getElementById('groupNameInput').value = '';
+  groupSelected = new Set();
+  document.getElementById('selectedCount').textContent = '0';
+  
+  fetch('/api/users').then(r => r.json()).then(data => {
+    const list = document.getElementById('groupUserList');
+    const others = data.all.filter(u => u !== myUsername);
+    if (others.length === 0) {
+      list.innerHTML = '<div class="empty" style="padding:20px;font-size:13px">Henüz başka kullanıcı yok</div>';
+    } else {
+      list.innerHTML = others.map(u => {
+        const online = data.online.includes(u) ? ' 🟢' : '';
+        return `<div class="user-item" id="gu-${u}" onclick="toggleGroupUser('${u}')">${u}${online}</div>`;
+      }).join('');
+    }
+  });
+}
+
+function toggleGroupUser(u) {
+  if (groupSelected.has(u)) {
+    groupSelected.delete(u);
+    const el = document.getElementById('gu-' + u);
+    if (el) el.style.background = '';
+  } else {
+    groupSelected.add(u);
+    const el = document.getElementById('gu-' + u);
+    if (el) el.style.background = '#6C5CE740';
+  }
+  document.getElementById('selectedCount').textContent = groupSelected.size;
+}
+
+function createGroup() {
+  const name = document.getElementById('groupNameInput').value.trim();
+  if (!name) return alert('Grup adı girin!');
+  if (groupSelected.size === 0) return alert('En az bir kişi seçin!');
+  document.getElementById('newGroupModal').classList.remove('show');
+  socket.emit('create-group', { groupName: name, members: [...groupSelected] });
+}
+
 // === OPEN CHAT ===
 function openChat(chatId, otherUser) {
   currentChatId = chatId;
-  document.getElementById('chatName').textContent = otherUser;
-  document.getElementById('chatAvatar').innerHTML = getAvatar(otherUser);
+  if (otherUser) {
+    document.getElementById('chatName').textContent = otherUser;
+    document.getElementById('chatAvatar').innerHTML = getAvatar(otherUser);
+  }
   document.getElementById('messages').innerHTML = '';
   document.getElementById('messageInput').value = '';
   showScreen('chat');
