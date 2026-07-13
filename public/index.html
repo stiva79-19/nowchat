@@ -191,7 +191,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="status" id="chatStatus"></div>
     </div>
     <div style="flex:1"></div>
-    <button class="call-header-btn" onclick="startCall()" title="Ara">📞</button>
+    <button class="call-header-btn" onclick="startVoiceCall()" title="Sesli ara">📞</button>
+    <button class="call-header-btn" onclick="startVideoCall()" title="Görüntülü ara" style="margin-left:4px">📹</button>
   </div>
   <div class="messages" id="messages"></div>
   <div class="typing" id="typingIndicator"></div>
@@ -689,6 +690,7 @@ function escapeHtml(text) {
 let callState = 'idle'; // idle | calling | ringing | connected
 let callTarget = null;
 let callChatId = null;
+let callType = 'voice';   // voice | video
 let peerConnection = null;
 let localStream = null;
 let isMuted = false;
@@ -703,28 +705,31 @@ const rtcConfig = {
   ]
 };
 
-function startCall() {
+function startVoiceCall() { startCall('voice'); }
+function startVideoCall() { startCall('video'); }
+
+function startCall(type) {
   if (callState !== 'idle') return;
   if (!currentChatId) return;
   
   const otherUser = document.getElementById('chatName').textContent;
   callTarget = otherUser;
   callChatId = currentChatId;
+  callType = type;
   callState = 'calling';
   
-  showCallUI(otherUser, 'Aranıyor...');
+  const status = type === 'video' ? 'Görüntülü aranıyor...' : 'Aranıyor...';
+  showCallUI(otherUser, status);
   document.getElementById('rejectBtn').style.display = '';
   document.getElementById('acceptBtn').style.display = 'none';
   document.getElementById('muteBtn').style.display = 'none';
+  document.getElementById('cameraBtn').style.display = 'none';
   document.getElementById('callOverlay').classList.add('ringing');
   
-  socket.emit('call-user', { to: otherUser, chatId: currentChatId });
+  socket.emit('call-user', { to: otherUser, chatId: currentChatId, callType: type });
   
-  // Timeout after 30s
   setTimeout(() => {
-    if (callState === 'calling') {
-      endCall('Yanıt yok');
-    }
+    if (callState === 'calling') endCall('Yanıt yok');
   }, 30000);
 }
 
@@ -744,13 +749,17 @@ function showCallUI(name, status) {
 
 async function initLocalStream() {
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { width: 640, height: 480, facingMode: 'user' } });
-    // Show local preview
-    const localVideo = document.getElementById('localVideo');
-    localVideo.srcObject = localStream;
-    localVideo.style.display = '';
+    const mediaOpts = callType === 'video'
+      ? { audio: true, video: { width: 640, height: 480, facingMode: 'user' } }
+      : { audio: true };
+    localStream = await navigator.mediaDevices.getUserMedia(mediaOpts);
+    if (callType === 'video') {
+      const localVideo = document.getElementById('localVideo');
+      localVideo.srcObject = localStream;
+      localVideo.style.display = '';
+    }
   } catch(e) {
-    alert('Mikrofon ve kamera erişimi gerekli!');
+    alert('Mikrofon' + (callType === 'video' ? ' ve kamera' : '') + ' erişimi gerekli!');
     throw e;
   }
 }
@@ -769,9 +778,16 @@ async function createPeerConnection() {
   };
   
   pc.ontrack = (e) => {
-    const remoteVideo = document.getElementById('remoteVideo');
-    remoteVideo.srcObject = e.streams[0];
-    remoteVideo.style.display = '';
+    if (callType === 'video') {
+      const remoteVideo = document.getElementById('remoteVideo');
+      remoteVideo.srcObject = e.streams[0];
+      remoteVideo.style.display = '';
+    } else {
+      // Voice only - play audio
+      const audio = new Audio();
+      audio.srcObject = e.streams[0];
+      audio.play().catch(() => {});
+    }
   };
   
   pc.oniceconnectionstatechange = () => {
@@ -796,7 +812,8 @@ async function acceptCall() {
   document.getElementById('rejectBtn').style.display = '';
   document.getElementById('acceptBtn').style.display = 'none';
   document.getElementById('muteBtn').style.display = '';
-  document.getElementById('cameraBtn').style.display = '';
+  document.getElementById('cameraBtn').style.display = callType === 'video' ? '' : 'none';
+  document.getElementById('callAvatar').style.display = callType === 'video' ? 'none' : '';
   
   startCallTimer();
   
@@ -893,7 +910,7 @@ function startCallTimer() {
 // Socket handlers for calls
 function setupCallHandlers() {
   // Incoming 1-on-1 call
-  socket.on('incoming-call', ({ from, chatId }) => {
+  socket.on('incoming-call', ({ from, chatId, callType: incomingType }) => {
     if (callState !== 'idle') {
       socket.emit('call-reject', { to: from });
       return;
@@ -901,12 +918,16 @@ function setupCallHandlers() {
     callState = 'ringing';
     callTarget = from;
     callChatId = chatId;
+    callType = incomingType || 'voice';
     
-    showCallUI(from, 'Seni arıyor...');
+    const status = callType === 'video' ? 'Görüntülü arıyor...' : 'Seni arıyor...';
+    showCallUI(from, status);
     document.getElementById('callOverlay').classList.add('ringing');
     document.getElementById('rejectBtn').style.display = '';
     document.getElementById('acceptBtn').style.display = '';
     document.getElementById('muteBtn').style.display = 'none';
+    document.getElementById('cameraBtn').style.display = 'none';
+    document.getElementById('callAvatar').style.display = '';
     
     // Auto-reject after 30s
     setTimeout(() => {
@@ -983,7 +1004,9 @@ async function createOffer() {
     document.getElementById('rejectBtn').style.display = '';
     document.getElementById('acceptBtn').style.display = 'none';
     document.getElementById('muteBtn').style.display = '';
-    document.getElementById('cameraBtn').style.display = '';
+    document.getElementById('cameraBtn').style.display = callType === 'video' ? '' : 'none';
+    // Show avatar for voice calls
+    document.getElementById('callAvatar').style.display = callType === 'video' ? 'none' : '';
     startCallTimer();
   } catch(e) {
     console.error('Offer error:', e);

@@ -262,12 +262,11 @@ io.on('connection', (socket) => {
 
   // === WEBRTC SIGNALING ===
   // 1-on-1 call
-  socket.on('call-user', ({ to, chatId }) => {
+  socket.on('call-user', ({ to, chatId, callType }) => {
     if (!username || !to) return;
-    // Find target user's socket
     for (const [sid, user] of users) {
       if (user.name === to && user.online) {
-        io.to(sid).emit('incoming-call', { from: username, chatId });
+        io.to(sid).emit('incoming-call', { from: username, chatId, callType: callType || 'voice' });
         return;
       }
     }
