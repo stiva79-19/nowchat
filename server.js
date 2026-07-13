@@ -22,6 +22,7 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 // === STORAGE ===
 const users = new Map();       // socketId -> { name, socketId, online }
 const chats = new Map();       // chatId -> { id, users: [name1, name2], messages[] }
+const profilePictures = new Map(); // username -> base64 data URL
 
 function getChatId(user1, user2) {
   return [user1, user2].sort().join('::');
@@ -93,12 +94,19 @@ function broadcastAllLists() {
   for (const chat of chats.values()) chat.users.forEach(u => allUsernames.add(u));
   for (const user of users.values()) allUsernames.add(user.name);
   
+  // Collect profile pictures
+  const pics = {};
+  for (const [name, pic] of profilePictures) {
+    pics[name] = pic;
+  }
+  
   for (const [sid, user] of users) {
     if (user.online) {
       io.to(sid).emit('chat-list', {
         chats: getUserChats(user.name),
         allUsers: [...allUsernames],
-        onlineUsers: onlineNow
+        onlineUsers: onlineNow,
+        profilePictures: pics
       });
     }
   }
@@ -128,7 +136,8 @@ io.on('connection', (socket) => {
     socket.emit('chat-list', {
       chats: myChats,
       allUsers: [...allUsernames],
-      onlineUsers: onlineNow
+      onlineUsers: onlineNow,
+      profilePictures: Object.fromEntries(profilePictures)
     });
     
     // Notify others this user is online + refresh their lists
@@ -225,6 +234,15 @@ io.on('connection', (socket) => {
       otherUser: withUser,
       lastMessage: null
     });
+  });
+  
+  // Profile picture
+  socket.on('set-profile-picture', ({ data }) => {
+    if (!username || !data) return;
+    // Limit size to ~500KB base64
+    if (data.length > 700000) return;
+    profilePictures.set(username, data);
+    broadcastAllLists();
   });
 
   socket.on('disconnect', () => {

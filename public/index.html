@@ -34,7 +34,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .chats::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
 .chat-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #1a1a2e;cursor:pointer;transition:background 0.15s}
 .chat-item:hover{background:#1a1a2e}
-.chat-item .avatar{width:48px;height:48px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;font-size:20px;color:#000;font-weight:700;flex-shrink:0}
+.chat-item .avatar{width:48px;height:48px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;font-size:20px;color:#000;font-weight:700;flex-shrink:0;overflow:hidden}
+.chat-header .avatar{width:40px;height:40px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;font-size:18px;color:#000;font-weight:700;overflow:hidden}
 .chat-item .info{flex:1;min-width:0}
 .chat-item .name{font-size:16px;color:#fff;font-weight:500}
 .chat-item .preview{font-size:13px;color:#888;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -119,7 +120,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div id="chatlist" class="screen">
   <div class="list-header">
     <h2>💬 NowChat</h2>
-    <span class="user-badge" id="myNameBadge"></span>
+    <span class="user-badge" id="myNameBadge" onclick="document.getElementById('profilePicInput').click()" style="cursor:pointer"></span>
     <span class="logout" onclick="logout()">Çıkış</span>
   </div>
   <div class="chats" id="chatsContainer">
@@ -160,6 +161,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <textarea id="messageInput" placeholder="Mesaj yaz..." rows="1" onkeydown="handleKey(event)"></textarea>
     <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>➤</button>
     <input type="file" id="imageInput" accept="image/*" onchange="sendImage(this)">
+<input type="file" id="profilePicInput" accept="image/*" onchange="setProfilePic(this)" style="display:none">
   </div>
 </div>
 
@@ -176,6 +178,39 @@ let socket;
 let myUsername = '';
 let currentChatId = null;
 let onlineUsers = new Set();
+let profilePics = {};
+let audioCtx = null;
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playBeep(freq, duration, type = 'sine') {
+  try {
+    initAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = 0.12;
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch(e) { /* audio not available */ }
+}
+
+function playSendSound() { playBeep(800, 0.1); }
+function playReceiveSound() { playBeep(523, 0.08); playBeep(659, 0.08); setTimeout(() => playBeep(784, 0.12), 80); }
+
+function getAvatar(name) {
+  const pic = profilePics[name];
+  if (pic) return `<img src="${pic}" style="width:100%;height:100%;border-radius:50%;object-fit:cover">`;
+  return (name || '?')[0].toUpperCase();
+}
 
 // === EMOJIS ===
 const EMOJIS = Array.from('😀😂🤣😍🥰😘😜🤪😎🤩🥳😇🤗🤔😐😑😴😤😡🤬😈👻💀👽🤖💩🙈🙉🙊💋💌💘💝💖💗💓💞💕❣️❤️🧡💛💚💙💜🤎🖤🤍👍👎👏🙌🤝💪👆👇👉👈✌️🤞🤟✋👌🤌☝️🔥⭐✨💥💯✅❌🎉🎊🎈🎀🏆🥇🥈🥉⚽🏀🎾🏐🎮🎲🎯🎸🎹🥁🎺🎷🌈☀️🌙⚡☁️💧🌊🍎🍕🍔🌮🍣🎂🍪☕🍺🐶🐱🐼🐨🐰🦊🐸🦄🐙🌸🌺🌻🌹💐🎄');
@@ -227,9 +262,12 @@ function connect() {
   });
   
   socket.on('chat-list', (data) => {
-    // data = { chats, allUsers, onlineUsers }
+    // data = { chats, allUsers, onlineUsers, profilePictures }
     if (data.onlineUsers) {
       onlineUsers = new Set(data.onlineUsers);
+    }
+    if (data.profilePictures) {
+      profilePics = data.profilePictures;
     }
     renderChatList(data.chats, data.allUsers || []);
   });
@@ -246,6 +284,7 @@ function connect() {
       addMessage(msg, false);
       scrollDown();
     }
+    if (msg.sender !== myUsername) playReceiveSound();
   });
   
   socket.on('chat-created', (chat) => {
@@ -287,7 +326,7 @@ function renderChatList(chats, allUsers) {
     const online = onlineUsers.has(c.otherUser) ? '<span class="online-dot"></span>' : '';
     html += `
       <div class="chat-item" onclick="openChat('${c.id}', '${c.otherUser}')">
-        <div class="avatar">${initial}</div>
+        <div class="avatar">${getAvatar(c.otherUser)}</div>
         <div class="info">
           <div class="name">${c.otherUser} ${online}</div>
           <div class="preview">${escapeHtml(preview.substring(0, 40))}</div>
@@ -304,7 +343,7 @@ function renderChatList(chats, allUsers) {
       const online = onlineUsers.has(u) ? '<span class="online-dot"></span>' : '';
       html += `
         <div class="chat-item" onclick="socket.emit('start-chat', {withUser:'${u}'})">
-          <div class="avatar">${u[0].toUpperCase()}</div>
+          <div class="avatar">${getAvatar(u)}</div>
           <div class="info">
             <div class="name">${u} ${online}</div>
             <div class="preview" style="color:#25D366">Sohbet başlatmak için tıkla →</div>
@@ -352,7 +391,7 @@ function startNewChat() {
 function openChat(chatId, otherUser) {
   currentChatId = chatId;
   document.getElementById('chatName').textContent = otherUser;
-  document.getElementById('chatAvatar').textContent = (otherUser || '?')[0].toUpperCase();
+  document.getElementById('chatAvatar').innerHTML = getAvatar(otherUser);
   document.getElementById('messages').innerHTML = '';
   document.getElementById('messageInput').value = '';
   showScreen('chat');
@@ -377,6 +416,7 @@ function sendMessage() {
   const text = input.value.trim();
   if (!text || !currentChatId) return;
   socket.emit('message', { chatId: currentChatId, text });
+  playSendSound();
   input.value = '';
   input.style.height = 'auto';
   document.getElementById('sendBtn').disabled = true;
@@ -435,6 +475,33 @@ function scrollDown() {
 function showImage(src) {
   document.getElementById('modalImage').src = src;
   document.getElementById('imageModal').classList.add('show');
+}
+
+function setProfilePic(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const size = 200;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      // Crop to square center
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      const data = canvas.toDataURL('image/jpeg', 0.7);
+      profilePics[myUsername] = data;
+      socket.emit('set-profile-picture', { data });
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
 }
 
 // === EMOJI ===
