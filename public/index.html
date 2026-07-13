@@ -779,7 +779,7 @@ async function acceptCall() {
   callState = 'connected';
   document.getElementById('callOverlay').classList.remove('ringing');
   document.getElementById('callStatus').textContent = 'Bağlandı';
-  document.getElementById('rejectBtn').style.display = 'none';
+  document.getElementById('rejectBtn').style.display = '';
   document.getElementById('acceptBtn').style.display = 'none';
   document.getElementById('muteBtn').style.display = '';
   
@@ -947,7 +947,7 @@ async function createOffer() {
     callState = 'connected';
     document.getElementById('callOverlay').classList.remove('ringing');
     document.getElementById('callStatus').textContent = 'Bağlandı';
-    document.getElementById('rejectBtn').style.display = 'none';
+    document.getElementById('rejectBtn').style.display = '';
     document.getElementById('acceptBtn').style.display = 'none';
     document.getElementById('muteBtn').style.display = '';
     startCallTimer();
