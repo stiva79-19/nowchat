@@ -178,7 +178,7 @@ let currentChatId = null;
 let onlineUsers = new Set();
 
 // === EMOJIS ===
-const EMOJIS = '😀😂🤣😍🥰😘😜🤪😎🤩🥳😇🤗🤔😐😑😴😤😡🤬😈👻💀👽🤖💩🙈🙉🙊💋💌💘💝💖💗💓💞💕❣️❤️🧡💛💚💙💜🤎🖤🤍👍👎👏🙌🤝💪👆👇👉👈✌️🤞🤟✋👌🤌☝️🔥⭐✨💥💯✅❌🎉🎊🎈🎀🏆🥇🥈🥉⚽🏀🎾🏐🎮🎲🎯🎸🎹🥁🎺🎷🌈☀️🌙⚡☁️💧🌊🍎🍕🍔🌮🍣🎂🍪☕🍺🐶🐱🐼🐨🐰🦊🐸🦄🐙🌸🌺🌻🌹💐🎄'.split('');
+const EMOJIS = Array.from('😀😂🤣😍🥰😘😜🤪😎🤩🥳😇🤗🤔😐😑😴😤😡🤬😈👻💀👽🤖💩🙈🙉🙊💋💌💘💝💖💗💓💞💕❣️❤️🧡💛💚💙💜🤎🖤🤍👍👎👏🙌🤝💪👆👇👉👈✌️🤞🤟✋👌🤌☝️🔥⭐✨💥💯✅❌🎉🎊🎈🎀🏆🥇🥈🥉⚽🏀🎾🏐🎮🎲🎯🎸🎹🥁🎺🎷🌈☀️🌙⚡☁️💧🌊🍎🍕🍔🌮🍣🎂🍪☕🍺🐶🐱🐼🐨🐰🦊🐸🦄🐙🌸🌺🌻🌹💐🎄');
 document.getElementById('emojiGrid').innerHTML = EMOJIS.map(e => 
   `<span onclick="insertEmoji('${e}')">${e}</span>`
 ).join('');
@@ -203,8 +203,12 @@ async function verifyCode() {
   });
   const data = await res.json();
   if (data.ok) {
-    // Code correct -> now ask name
-    const name = prompt('Adın ne?') || 'Misafir';
+    // Check saved name
+    let name = localStorage.getItem('nowchat_name');
+    if (!name) {
+      name = prompt('Adın ne?') || 'Misafir';
+      localStorage.setItem('nowchat_name', name);
+    }
     myUsername = name;
     document.getElementById('myNameBadge').textContent = name;
     connect();
@@ -465,6 +469,7 @@ function logout() {
   if (socket) socket.disconnect();
   myUsername = '';
   currentChatId = null;
+  localStorage.removeItem('nowchat_name');
   showScreen('welcome');
 }
 
