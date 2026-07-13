@@ -125,6 +125,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 /* Ripple animation during ringing */
 @keyframes ripple{0%{box-shadow:0 0 0 0 rgba(37,211,102,.5)}100%{box-shadow:0 0 0 20px rgba(37,211,102,0)}}
 .ringing .call-avatar{animation:ripple 1.5s infinite}
+
+/* Video */
+.call-videos{position:absolute;top:0;left:0;right:0;bottom:0;background:#000}
+.call-video{width:100%;height:100%;object-fit:cover}
+.call-video-local{position:absolute;top:12px;right:12px;width:120px;height:160px;border-radius:12px;border:2px solid #25D366;object-fit:cover;z-index:10}
 </style>
 </head>
 <body>
@@ -211,12 +216,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <!-- CALL OVERLAY -->
 <div class="call-overlay" id="callOverlay">
+  <div class="call-videos">
+    <video id="remoteVideo" class="call-video" autoplay playsinline style="display:none"></video>
+    <video id="localVideo" class="call-video call-video-local" autoplay playsinline muted style="display:none"></video>
+  </div>
   <div class="call-avatar" id="callAvatar">?</div>
   <div class="call-name" id="callName">...</div>
   <div class="call-status" id="callStatus">Bağlanıyor...</div>
   <div class="call-duration" id="callDuration" style="display:none">00:00</div>
   <div class="call-buttons">
     <button class="call-btn mute" id="muteBtn" onclick="toggleMute()" style="display:none">🎤</button>
+    <button class="call-btn mute" id="cameraBtn" onclick="toggleCamera()" style="display:none">📹</button>
     <button class="call-btn reject" id="rejectBtn" onclick="rejectCall()">📵</button>
     <button class="call-btn accept" id="acceptBtn" onclick="acceptCall()" style="display:none">📞</button>
   </div>
@@ -734,9 +744,13 @@ function showCallUI(name, status) {
 
 async function initLocalStream() {
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { width: 640, height: 480, facingMode: 'user' } });
+    // Show local preview
+    const localVideo = document.getElementById('localVideo');
+    localVideo.srcObject = localStream;
+    localVideo.style.display = '';
   } catch(e) {
-    alert('Mikrofon erişimi gerekli!');
+    alert('Mikrofon ve kamera erişimi gerekli!');
     throw e;
   }
 }
@@ -755,9 +769,9 @@ async function createPeerConnection() {
   };
   
   pc.ontrack = (e) => {
-    const audio = new Audio();
-    audio.srcObject = e.streams[0];
-    audio.play().catch(() => {});
+    const remoteVideo = document.getElementById('remoteVideo');
+    remoteVideo.srcObject = e.streams[0];
+    remoteVideo.style.display = '';
   };
   
   pc.oniceconnectionstatechange = () => {
@@ -782,6 +796,7 @@ async function acceptCall() {
   document.getElementById('rejectBtn').style.display = '';
   document.getElementById('acceptBtn').style.display = 'none';
   document.getElementById('muteBtn').style.display = '';
+  document.getElementById('cameraBtn').style.display = '';
   
   startCallTimer();
   
@@ -834,7 +849,15 @@ function cleanupCall() {
   
   document.getElementById('callDuration').style.display = 'none';
   document.getElementById('muteBtn').classList.remove('muted');
+  document.getElementById('cameraBtn').classList.remove('muted');
+  document.getElementById('cameraBtn').style.display = 'none';
   isMuted = false;
+  // Reset videos
+  document.getElementById('localVideo').srcObject = null;
+  document.getElementById('localVideo').style.display = 'none';
+  document.getElementById('remoteVideo').srcObject = null;
+  document.getElementById('remoteVideo').style.display = 'none';
+  document.getElementById('callAvatar').style.display = '';
 }
 
 function toggleMute() {
@@ -843,6 +866,16 @@ function toggleMute() {
   localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
   document.getElementById('muteBtn').classList.toggle('muted', isMuted);
   document.getElementById('muteBtn').textContent = isMuted ? '🔇' : '🎤';
+}
+
+function toggleCamera() {
+  if (!localStream) return;
+  const videoTrack = localStream.getVideoTracks()[0];
+  if (!videoTrack) return;
+  videoTrack.enabled = !videoTrack.enabled;
+  document.getElementById('cameraBtn').classList.toggle('muted', !videoTrack.enabled);
+  document.getElementById('cameraBtn').textContent = videoTrack.enabled ? '📹' : '📷‍❌';
+  document.getElementById('localVideo').style.display = videoTrack.enabled ? '' : 'none';
 }
 
 function startCallTimer() {
@@ -950,6 +983,7 @@ async function createOffer() {
     document.getElementById('rejectBtn').style.display = '';
     document.getElementById('acceptBtn').style.display = 'none';
     document.getElementById('muteBtn').style.display = '';
+    document.getElementById('cameraBtn').style.display = '';
     startCallTimer();
   } catch(e) {
     console.error('Offer error:', e);
